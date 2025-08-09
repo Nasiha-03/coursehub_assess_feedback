@@ -114,3 +114,10 @@ export const fetchAssessments = async (token: string): Promise<ApiResponse<any[]
     }, 800);
   });
 };
+import axios from 'axios';
+
+export const downloadReport = async (reportData: any) => {
+  return axios.post('/api/download-report', reportData, {
+    responseType: 'blob'
+  });
+};

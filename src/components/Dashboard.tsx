@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchAssessments } from '../utils/api';
+import { fetchAssessments, downloadReport } from '../utils/api';
 
 interface Assessment {
   id: string;
@@ -9,7 +9,6 @@ interface Assessment {
   percentage: number;
   date: string;
   status: 'excellent' | 'good' | 'average' | 'poor';
-  reportUrl: string;
 }
 
 interface DashboardProps {
@@ -23,6 +22,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, authToken }) => 
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
+
+  const [showHeader, setShowHeader] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      if (currentScrollY > lastScrollY && currentScrollY > 50) {
+        setShowHeader(false);
+      } else {
+        setShowHeader(true);
+      }
+
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
 
   useEffect(() => {
     const loadAssessments = async () => {
@@ -43,9 +62,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, authToken }) => 
     };
     loadAssessments();
   }, [authToken]);
-
-  const sortedAssessments = assessments.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const latestAssessment = sortedAssessments[0];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -69,29 +85,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, authToken }) => 
     setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 3000);
   };
 
-  const handleDownload = (assessmentId: string, subject: string) => {
-    const assessment = assessments.find(a => a.id === assessmentId);
-    if (!assessment?.reportUrl) {
-      showNotification(`No report found for ${subject}`, 'error');
-      return;
-    }
-    setDownloadingId(assessmentId);
+  const handleDownload = async (assessment: Assessment) => {
+  setDownloadingId(assessment.id);
+
+  try {
+    const response = await downloadReport({
+      name: 'Nasiha Sulthana',
+      subject: assessment.subject,
+      score: assessment.score,
+      date: assessment.date
+    });
+
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = assessment.reportUrl;
-    link.download = `${subject}-report.pdf`;
+    link.href = url;
+    link.setAttribute('download', `${assessment.subject}-report.pdf`);
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
-    setTimeout(() => {
-      setDownloadingId(null);
-      showNotification(`${subject} report downloaded successfully!`, 'success');
-    }, 1000);
-  };
+    link.remove();
 
+    showNotification(`${assessment.subject} report downloaded successfully!`, 'success');
+  } catch (error) {
+    console.error(error);
+    showNotification(`Failed to download report for ${assessment.subject}`, 'error');
+  } finally {
+    setDownloadingId(null);
+  }
+};
+
+
+  const sortedAssessments = assessments.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const latestAssessment = sortedAssessments[0];
   const averageScore = assessments.length > 0 ? assessments.reduce((sum, a) => sum + a.percentage, 0) / assessments.length : 0;
 
   if (isLoading) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center pt-16"><p>Loading your assessments...</p></div>;
-
   if (error) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center pt-16"><p>{error}</p></div>;
 
   return (
@@ -100,7 +128,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, authToken }) => 
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-xl shadow-lg transition-all duration-500 ${notification.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>{notification.message}</div>
       )}
 
-      <header className="bg-white/80 backdrop-blur-lg border-b border-white/20 sticky top-16 z-40">
+      <header className={`bg-white/80 backdrop-blur-lg border-b border-white/20 sticky top-0 z-40 transform transition-transform duration-500 ${showHeader ? 'translate-y-0' : '-translate-y-full'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <h1 className="text-xl font-bold bg-gradient-to-r from-purple-500 via-pink-500 to-blue-400 text-transparent bg-clip-text">Course Hub Assessment-Portal</h1>
@@ -144,7 +172,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, authToken }) => 
               <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden mb-4">
                 <div className={`h-full ${getProgressBarColor(assessment.percentage)} rounded-full`} style={{ width: `${assessment.percentage}%` }}></div>
               </div>
-              <button onClick={() => handleDownload(assessment.id, assessment.subject)} className="mt-2 px-4 py-2 rounded-xl bg-blue-500 text-white hover:bg-blue-600">
+              <button
+                onClick={() => handleDownload(assessment)}
+                className="mt-2 px-4 py-2 rounded-xl bg-blue-500 text-white hover:bg-blue-600"
+              >
                 {downloadingId === assessment.id ? 'Downloading...' : 'Download PDF'}
               </button>
             </div>

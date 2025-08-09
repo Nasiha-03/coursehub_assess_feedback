@@ -106,9 +106,11 @@ const saveUser = (newUser: { email: string; password: string }) => {
       );
 
       if (matchedUser) {
-        const token = 'mock-jwt-token-' + Date.now();
-        onLogin(token);
-      } else {
+      const token = 'mock-jwt-token-' + Date.now();
+      localStorage.setItem('token', token); // ✅ store token
+      onLogin(token);
+      }
+else {
         setError('Invalid email or password');
       }
     } else {
@@ -122,7 +124,9 @@ const saveUser = (newUser: { email: string; password: string }) => {
       } else {
         saveUser({ email: formData.email, password: formData.password });
         const token = 'mock-jwt-token-' + Date.now();
+        localStorage.setItem('token', token); // ✅ store token
         onLogin(token);
+
       }
     }
 
